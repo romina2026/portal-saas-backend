@@ -1,0 +1,9 @@
+DATABASE_URL=postgresql://postgres.huklwvkrykemdqpglwzr:Macarena07*2026@aws-0-us-west-2.pooler.supabase.com:6543/postgres
+JWT_SECRET=portal-empleado-secret-7492-8831-5647-clave-segura-2025
+MANAGER_API_URL=http://192.168.0.99/
+MANAGER_API_KEY=CAMBIAR-POR-KEY-DEL-MANAGER
+SUPABASE_URL=https://huklwvkrykemdqpglwzr.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1a2x3dmtyeWtlbWRxcGdsd3pyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDYxMjEyMSwiZXhwIjoyMDkwMTg4MTIxfQ.hvbuWwtb0jjP06qd6ayZgOA_A3rRfxvN2Jl1HPQaWkg
+STORAGE_BUCKET=recibos
+PORT=3000
+FRONTEND_URL=http://localhost:5173

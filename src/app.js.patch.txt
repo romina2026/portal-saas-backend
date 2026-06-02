@@ -1,0 +1,5 @@
+// ── Agregar esta línea junto a los otros imports en app.js ───
+import garantiasRoutes from './routes/garantias.js';
+
+// ── Agregar esta línea junto a las otras rutas en app.js ─────
+app.use('/garantias', garantiasRoutes);
