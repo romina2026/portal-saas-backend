@@ -27,7 +27,11 @@ app.get('/debug-super', async (req, res) => {
   }
 });
 
-app.use('/auth', authRoutes);
+app.use('/auth', authRoutes);app.get('/generar-hash', async (req, res) => {
+  const hash = await bcrypt.hash('27011987', 10);
+  const ok = await bcrypt.compare('27011987', hash);
+  return res.json({ hash, ok });
+});
 app.use('/admin', adminRoutes);
 app.use('/super', superAdminRoutes);
 app.use('/health', healthRoutes);
