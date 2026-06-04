@@ -87,9 +87,20 @@ export async function loginSuperAdmin(req, res) {
       `SELECT id, email, password_hash, nombre FROM super_admins WHERE email = $1`,
       [email.trim().toLowerCase()]
     );
+
+    console.log('[debug] email buscado:', email.trim().toLowerCase());
+    console.log('[debug] registro encontrado:', sa ? 'SI' : 'NO');
+
     if (!sa) return res.status(401).json({ error: 'Credenciales incorrectas.' });
 
+    console.log('[debug] hash en DB:', sa.password_hash);
+    console.log('[debug] largo hash:', sa.password_hash.length);
+    console.log('[debug] password recibida:', password);
+    console.log('[debug] largo password:', password.length);
+
     const ok = await bcrypt.compare(password, sa.password_hash);
+    console.log('[debug] bcrypt result:', ok);
+
     if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas.' });
 
     const accessToken = generarJWT({
