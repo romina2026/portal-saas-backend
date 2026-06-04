@@ -4,18 +4,15 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
 import { db } from './db/client.js';
-
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import superAdminRoutes from './routes/superadmin.js';
 import healthRoutes from './routes/health.js';
 
 const app = express();
-
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// ENDPOINT TEMPORAL DE DEBUG — borrar después
 app.get('/debug-super', async (req, res) => {
   try {
     const { rows } = await db.query('SELECT id, email, password_hash, length(password_hash) as largo FROM super_admins');
@@ -27,11 +24,13 @@ app.get('/debug-super', async (req, res) => {
   }
 });
 
-app.use('/auth', authRoutes);app.get('/generar-hash', async (req, res) => {
+app.get('/generar-hash', async (req, res) => {
   const hash = await bcrypt.hash('27011987', 10);
   const ok = await bcrypt.compare('27011987', hash);
   return res.json({ hash, ok });
 });
+
+app.use('/auth', authRoutes);
 app.use('/admin', adminRoutes);
 app.use('/super', superAdminRoutes);
 app.use('/health', healthRoutes);
