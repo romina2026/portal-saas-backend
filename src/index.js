@@ -22,7 +22,7 @@ app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`))
 });
 
 app.get('/generar-hash', async (req, res) => {
-  const hash = await bcrypt.hash('27011987', 10);
+  const hash = await bcrypt.hash('1234', 10);
   const ok = await bcrypt.compare('27011987', hash);
   return res.json({ hash, ok });
 });
