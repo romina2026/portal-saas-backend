@@ -1,41 +1,57 @@
+// src/controllers/fichajes.controller.js
 import { db } from '../db/client.js';
+
+function distanciaMetros(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 // POST /fichajes/entrada
 export async function registrarEntrada(req, res) {
   const { lat, lng } = req.body;
+  const empleado_id = req.empleado.sub;
+  const empresa_id  = req.empleado.empresa_id;
+
   try {
     // Validar ubicacion si se enviaron coordenadas
     if (lat && lng) {
       const { rows: ubicaciones } = await db.query(
-        `SELECT * FROM ubicaciones_empresa WHERE activo = true`
+        `SELECT * FROM ubicaciones_empresa WHERE empresa_id = $1`,
+        [empresa_id]
       );
-      const dentroDeUbicacion = ubicaciones.some(u => {
-        const R = 6371000;
-        const dLat = (u.lat - lat) * Math.PI / 180;
-        const dLng = (u.lng - lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(lat * Math.PI / 180) * Math.cos(u.lat * Math.PI / 180) *
-          Math.sin(dLng/2) * Math.sin(dLng/2);
-        const distancia = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return distancia <= (u.radio_metros || 100);
-      });
-      if (!dentroDeUbicacion) {
-        return res.status(403).json({ error: 'Debes estar en una ubicacion de la empresa para fichar.' });
+      if (ubicaciones.length > 0) {
+        const dentroDeUbicacion = ubicaciones.some(u =>
+          distanciaMetros(lat, lng, Number(u.latitud), Number(u.longitud)) <= (u.radio_metros || 100)
+        );
+        if (!dentroDeUbicacion) {
+          return res.status(403).json({ error: 'Debes estar en una ubicación de la empresa para fichar.' });
+        }
       }
     }
-    // Verificar que no haya una entrada sin salida del mismo dia
-    const { rows: [abierto] } = await db.query(
-      `SELECT id FROM fichajes WHERE empleado_id=$1 AND estado='activo' AND entrada::date = CURRENT_DATE`,
-      [req.empleado.sub]
+
+    // Verificar que no haya una entrada sin salida hoy
+    const { rows: [ultimoFichaje] } = await db.query(
+      `SELECT tipo FROM fichajes
+       WHERE empleado_id = $1 AND empresa_id = $2
+       AND created_at::date = CURRENT_DATE
+       ORDER BY created_at DESC LIMIT 1`,
+      [empleado_id, empresa_id]
     );
-    if (abierto) {
-      return res.status(409).json({ error: 'Ya tenes una entrada registrada hoy sin salida.' });
+
+    if (ultimoFichaje?.tipo === 'entrada') {
+      return res.status(409).json({ error: 'Ya tenés una entrada registrada hoy sin salida.' });
     }
+
     const { rows: [fichaje] } = await db.query(
-      `INSERT INTO fichajes (empleado_id, lat_entrada, lng_entrada)
-       VALUES ($1, $2, $3)
-       RETURNING id, entrada, lat_entrada, lng_entrada`,
-      [req.empleado.sub, lat ?? null, lng ?? null]
+      `INSERT INTO fichajes (empleado_id, empresa_id, tipo, latitud, longitud)
+       VALUES ($1, $2, 'entrada', $3, $4)
+       RETURNING id, tipo, created_at`,
+      [empleado_id, empresa_id, lat ?? null, lng ?? null]
     );
+
     return res.status(201).json({ mensaje: 'Entrada registrada.', fichaje });
   } catch (err) {
     console.error('[fichajes/entrada]', err);
@@ -46,23 +62,29 @@ export async function registrarEntrada(req, res) {
 // POST /fichajes/salida
 export async function registrarSalida(req, res) {
   const { lat, lng } = req.body;
+  const empleado_id = req.empleado.sub;
+  const empresa_id  = req.empleado.empresa_id;
+
   try {
-    const { rows: [abierto] } = await db.query(
-      `SELECT entrada FROM fichajes
-       WHERE empleado_id=$1 AND estado='activo'
-       ORDER BY entrada DESC LIMIT 1`,
-      [req.empleado.sub]
+    const { rows: [ultimoFichaje] } = await db.query(
+      `SELECT tipo FROM fichajes
+       WHERE empleado_id = $1 AND empresa_id = $2
+       AND created_at::date = CURRENT_DATE
+       ORDER BY created_at DESC LIMIT 1`,
+      [empleado_id, empresa_id]
     );
-    if (!abierto) {
+
+    if (!ultimoFichaje || ultimoFichaje.tipo === 'salida') {
       return res.status(409).json({ error: 'No hay una entrada activa para cerrar.' });
     }
+
     const { rows: [fichaje] } = await db.query(
-      `UPDATE fichajes
-       SET salida=NOW(), lat_salida=$1, lng_salida=$2
-       WHERE id=$3
-       RETURNING id, entrada, salida, horas_trabajadas`,
-      [lat ?? null, lng ?? null, abierto.id]
+      `INSERT INTO fichajes (empleado_id, empresa_id, tipo, latitud, longitud)
+       VALUES ($1, $2, 'salida', $3, $4)
+       RETURNING id, tipo, created_at`,
+      [empleado_id, empresa_id, lat ?? null, lng ?? null]
     );
+
     return res.json({ mensaje: 'Salida registrada.', fichaje });
   } catch (err) {
     console.error('[fichajes/salida]', err);
@@ -70,72 +92,64 @@ export async function registrarSalida(req, res) {
   }
 }
 
-// GET /fichajes/semana  - fichajes de la semana actual
-export async function getFichajesSemana(req, res) {
-  try {
-    const { rows } = await db.query(
-      `SELECT id, entrada, salida, horas_trabajadas, estado
-       FROM fichajes
-       WHERE empleado_id=$1
-         AND entrada >= date_trunc('week', NOW())
-       ORDER BY entrada DESC`,
-      [req.empleado.sub]
-    );
-    return res.json(rows);
-  } catch (err) {
-    return res.status(500).json({ error: 'Error obteniendo fichajes.' });
-  }
-}
-
-// GET /fichajes/estado  - si hay entrada activa hoy
+// GET /fichajes/estado
 export async function getEstadoHoy(req, res) {
+  const empleado_id = req.empleado.sub;
+  const empresa_id  = req.empleado.empresa_id;
+
   try {
-    const { rows: [activo] } = await db.query(
-      `SELECT id, entrada FROM fichajes
-       WHERE empleado_id=$1 AND estado='activo' AND entrada::date = CURRENT_DATE
-       ORDER BY entrada DESC LIMIT 1`,
-      [req.empleado.sub]
+    const { rows: [ultimoFichaje] } = await db.query(
+      `SELECT tipo, created_at FROM fichajes
+       WHERE empleado_id = $1 AND empresa_id = $2
+       AND created_at::date = CURRENT_DATE
+       ORDER BY created_at DESC LIMIT 1`,
+      [empleado_id, empresa_id]
     );
-    return res.json({ activo: !!activo, fichaje: activo || null });
+
+    return res.json({
+      activo: ultimoFichaje?.tipo === 'entrada',
+      entrada: ultimoFichaje?.tipo === 'entrada' ? ultimoFichaje.created_at : null,
+    });
   } catch (err) {
     return res.status(500).json({ error: 'Error obteniendo estado.' });
   }
 }
 
-// GET /fichajes/admin
-export async function getFichajesAdmin(req, res) {
-  const { desde, hasta } = req.query;
+// GET /fichajes/semana
+export async function getFichajesSemana(req, res) {
+  const empleado_id = req.empleado.sub;
+  const empresa_id  = req.empleado.empresa_id;
+
   try {
     const { rows } = await db.query(
-      `SELECT f.id, f.entrada, f.salida, f.horas_trabajadas, f.estado,
-              f.lat_entrada, f.lng_entrada, e.nombre_completo, e.legajo
-       FROM fichajes f
-       JOIN empleados e ON e.id = f.empleado_id
-       WHERE f.entrada::date BETWEEN $1 AND $2
-       ORDER BY f.entrada DESC`,
-      [desde || new Date().toISOString().slice(0,10), hasta || new Date().toISOString().slice(0,10)]
+      `SELECT id, tipo, created_at, latitud, longitud
+       FROM fichajes
+       WHERE empleado_id = $1 AND empresa_id = $2
+       AND created_at >= date_trunc('week', NOW())
+       ORDER BY created_at ASC`,
+      [empleado_id, empresa_id]
     );
-    const { rows: ubicaciones } = await db.query(`SELECT * FROM ubicaciones_empresa WHERE activo = true`);
-    function distanciaMetros(lat1, lng1, lat2, lng2) {
-      const R = 6371000;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLng = (lng2 - lng1) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    // Agrupar entradas y salidas por día
+    const dias = {};
+    for (const f of rows) {
+      const fecha = f.created_at.toISOString().slice(0, 10);
+      if (!dias[fecha]) dias[fecha] = { entrada: null, salida: null };
+      if (f.tipo === 'entrada') dias[fecha].entrada = f.created_at;
+      if (f.tipo === 'salida') dias[fecha].salida = f.created_at;
     }
-    const resultado = rows.map(f => {
-      let sucursal = '—';
-      if (f.lat_entrada && f.lng_entrada) {
-        let menorDist = Infinity;
-        for (const u of ubicaciones) {
-          const dist = distanciaMetros(Number(f.lat_entrada), Number(f.lng_entrada), Number(u.lat), Number(u.lng));
-          if (dist < menorDist) { menorDist = dist; sucursal = `${u.nombre} (${Math.round(dist)}m)`; }
-        }
+
+    const resultado = Object.entries(dias).map(([fecha, v]) => {
+      let horas_trabajadas = null;
+      if (v.entrada && v.salida) {
+        const diff = (new Date(v.salida) - new Date(v.entrada)) / 3600000;
+        horas_trabajadas = diff.toFixed(1);
       }
-      return { ...f, sucursal };
+      return { fecha, entrada: v.entrada, salida: v.salida, horas_trabajadas };
     });
+
     return res.json(resultado);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Error obteniendo fichajes.' });
   }
 }

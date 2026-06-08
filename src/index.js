@@ -2,19 +2,21 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import authRoutes from './routes/auth.js';
-import adminRoutes from './routes/admin.js';
+import authRoutes     from './routes/auth.js';
+import adminRoutes    from './routes/admin.js';
 import superAdminRoutes from './routes/superadmin.js';
-import healthRoutes from './routes/health.js';
+import healthRoutes   from './routes/health.js';
+import fichajesRoutes from './routes/fichajes.js';
 
 const app = express();
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-app.use('/auth', authRoutes);
-app.use('/admin', adminRoutes);
-app.use('/super', superAdminRoutes);
-app.use('/health', healthRoutes);
+app.use('/auth',    authRoutes);
+app.use('/admin',   adminRoutes);
+app.use('/super',   superAdminRoutes);
+app.use('/health',  healthRoutes);
+app.use('/fichajes', fichajesRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
