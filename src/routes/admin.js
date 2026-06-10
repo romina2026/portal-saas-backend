@@ -6,6 +6,7 @@ import {
   getFichajes, getSolicitudes, actualizarSolicitud,
   getRecibos
 } from '../controllers/adminEmpresa.controller.js';
+import { subirRecibo } from '../controllers/recibos.controller.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -16,4 +17,5 @@ router.get('/fichajes', getFichajes);
 router.get('/solicitudes', getSolicitudes);
 router.put('/solicitudes/:id', actualizarSolicitud);
 router.get('/recibos', getRecibos);
+router.post('/recibos/subir', subirRecibo);
 export default router;
